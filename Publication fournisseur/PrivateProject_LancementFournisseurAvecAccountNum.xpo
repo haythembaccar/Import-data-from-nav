@@ -1,0 +1,690 @@
+﻿Exportfile for AOT version 1.0 or later
+Formatversion: 1
+
+***Element: CLS
+
+; Microsoft Dynamics AX Class : VendRequestAddVendorHelper déchargé
+; --------------------------------------------------------------------------------
+  CLSVERSION 1
+  
+  CLASS #VendRequestAddVendorHelper
+    PROPERTIES
+      Name                #VendRequestAddVendorHelper
+      Origin              #{2D1A0000-0000-1000-3EC1-D024F1F9B5AD}
+    ENDPROPERTIES
+    
+    METHODS
+      SOURCE #classDeclaration
+        #class VendRequestAddVendorHelper
+        #{
+        #}
+      ENDSOURCE
+      SOURCE #createVendor
+        #/// <summary>
+        #/// Adds a vendor to a legal entity that is based on an existing <c>DirPartyTable</c> record.
+        #/// </summary>
+        #/// <param name="_addVendor">
+        #/// The <c>VendRequestAddVendor</c> record that contains the vendor information.
+        #/// </param>
+        #/// <param name="_partyId">
+        #/// The vendor party record ID.
+        #/// </param>
+        #public static server void createVendor(VendRequestAddVendor _addVendor, recId _partyId)
+        #{
+        #    VendTable                       vendor;
+        #    VendRequestCompany              requestCompany;
+        #    VendRequestCategory             requestCategory;
+        #    VendRequestProspectiveProfile   prospectiveProfile;
+        #    VendAccount                     vendAccountNum;
+        #    ContactPerson                   contactPerson;
+        #
+        #    select forUpdate firstOnly crossCompany requestCompany where requestCompany.RecId == _addVendor.VendRequest;
+        #
+        #    ttsbegin;
+        #
+        #    changecompany(_addVendor.Company)
+        #    {
+        #     /*   if (VendParameters::numRefVendAccount().numberSequenceTable().Manual)
+        #        {
+        #            throw error("@SYS343009");
+        #        }
+        #     */
+        #        if (requestCompany.SignUp != 0 && requestCompany.VendRequestCompanyStatus == VendRequestCompanyStatus::Draft)
+        #        {
+        #            // if from unsolicited vendor then update prospective profile vendor group and currency
+        #            // provided in Vendor Add record
+        #            prospectiveProfile = VendRequestProspectiveProfile::find(requestCompany.ProspectiveProfile, true);
+        #            prospectiveProfile.VendGroup    = _addVendor.VendGroup;
+        #            prospectiveProfile.Currency     = _addVendor.Currency;
+        #            prospectiveProfile.update();
+        #
+        #            // update vendor request status
+        #            requestCompany.VendRequestCompanyType   = VendRequestCompanyType::NewVendorCompanyProfile;
+        #            requestCompany.VendRequestCompanyStatus = VendRequestCompanyStatus::RequestComplete;
+        #
+        #            // update categories for a vendor request
+        #            while select forupdate recId, VendRequest, VendorConfirmed
+        #            from requestCategory
+        #                where requestCategory.VendRequest == requestCompany.RecId
+        #            {
+        #                requestCategory.VendorConfirmed = VendRequestVendorConfirmed::Yes;
+        #                requestCategory.update();
+        #            }
+        #
+        #            VendRequestCompanyWorkflowManager::convertProspectToVendor(requestCompany);
+        #            // get vendor account number
+        #            vendAccountNum = vendRequestCompany::findRecId(_addVendor.VendRequest).AccountNum;
+        #        }
+        #        else
+        #        {
+        #            // if vendor is created from existing vendor profile
+        #            // get a new Account number in requested company
+        #
+        #            /* cette ligne est désactivé pour permettre le lancement des fournisseur avec leur numéros de comptes
+        #            vendAccountNum = smmParameters::getNumber(smmNumbSeqUsed::Vendor);  */
+        #
+        #            // insert vendor record with parameters set up in Vendor Add record
+        #            vendor.clear();
+        #
+        #            //attribution du compte au niveau du nouveau fournisseur
+        #
+        #            vendor.AccountNum   =  _addVendor.VendAccountNum;
+        #
+        #            vendor.VendGroup    = _addVendor.VendGroup;
+        #            vendor.Currency     = _addVendor.Currency;
+        #            vendor.Blocked      = _addVendor.Blocked;
+        #            vendor.Party        = _partyId;
+        #            vendor.insert();
+        #
+        #            if (requestCompany.RecId != 0)
+        #            {
+        #                contactPerson.clear();
+        #                contactPerson.initValue();
+        #                contactPerson.Party = requestCompany.ContactParty;
+        #                contactPerson.initFromVendTable(vendor);
+        #                contactPerson.insert();
+        #            }
+        #        }
+        #    }
+        #
+        #    _addVendor.VendAccountNum = vendAccountNum;
+        #    _addVendor.update();
+        #
+        #    ttscommit;
+        #}
+      ENDSOURCE
+      SOURCE #getAvailableCompanyQuery
+        #/// <summary>
+        #///    Get the companies where there does not exist a vendor for an address book party.
+        #/// </summary>
+        #/// <param name="_vendPartyRecId">
+        #///    The vendor party record ID for which to find available companies.
+        #/// </param>
+        #/// <returns>
+        #///    A query that represents the available companies.
+        #/// </returns>
+        #public static Query getAvailableCompanyQuery(recId _vendPartyRecId)
+        #{
+        #    Query query = new Query();
+        #    QueryBuildDataSource dataArea_DS;
+        #    QueryBuildDataSource vendTable_DS;
+        #
+        #    query.allowCrossCompany(true);
+        #    dataArea_DS = query.addDataSource(tablenum(DataArea));
+        #    vendTable_DS = dataArea_DS.addDataSource(tablenum(VendTable));
+        #    vendTable_DS.addRange(fieldnum(VendTable, Party)).value(queryValue(_vendPartyRecId));
+        #    vendTable_DS.addLink(fieldnum(DataArea, Id), fieldnum(VendTable, DataAreaId));
+        #    vendTable_DS.joinMode(JoinMode::NoExistsJoin);
+        #
+        #    return query;
+        #}
+      ENDSOURCE
+    ENDMETHODS
+  ENDCLASS
+
+***Element: FRM
+
+; Microsoft Dynamics AX Forms unloaded
+; --------------------------------------------------------------------------------
+FRMVERSION 12
+
+FORM #VendRequestAddVendor
+  PROPERTIES
+    Name                #VendRequestAddVendor
+    Origin              #{1D47BC9A-4B11-4BE3-A0FB-B52B50C82657}
+  ENDPROPERTIES
+  
+  METHODS
+    SOURCE #classDeclaration
+      #public class FormRun extends ObjectRun
+      #{
+      #    recId vendPartyRecId;
+      #    recId vendRequestRecId;
+      #    recId vendRequestSignup;
+      #    VendAccount  vendAccount;
+      #}
+    ENDSOURCE
+    SOURCE #createVendorFromAddVendorRequest
+      #/// <summary>
+      #/// Creates vendor using vendor add request parameters
+      #/// </summary>
+      #public void createVendorFromAddVendorRequest()
+      #{
+      #    VendRequestAddVendorHelper::createVendor(vendRequestAddVendor, vendPartyRecId);
+      #}
+    ENDSOURCE
+    SOURCE #createVendRequestFromUnsolicitedParty
+      #/// <summary>
+      #/// Creates a party and a vendor request for the selected unsolicited vendor.
+      #/// </summary>
+      #public void createVendRequestFromUnsolicitedParty()
+      #{
+      #    VendRequestSignup vendRequestSignupLookUp;
+      #
+      #    if (element.args().menuItemName() == menuitemdisplaystr(VendUnsolicitedVendorCopyVendor))
+      #    {
+      #        // create vendor from Unsolicited profile
+      #        changecompany (vendRequestAddVendor.Company)
+      #        {
+      #            ttsbegin;
+      #            select firstonly vendRequestSignupLookUp
+      #                where vendRequestSignupLookUp.RecId == vendRequestSignup;
+      #            vendRequestRecId    = VendRequestCompany::createFromUnsolicited(vendRequestSignupLookUp);
+      #            ttscommit;
+      #            vendPartyRecId      = VendRequestCompany::findRecId(vendRequestRecId).VendParty;
+      #        }
+      #
+      #        // update datasourse
+      #        vendRequestAddVendor.Party          = vendPartyRecId;
+      #        vendRequestAddVendor.VendRequest    = vendRequestRecId;
+      #    }
+      #}
+    ENDSOURCE
+    SOURCE #init
+      #public void init()
+      #{
+      #    VendRequestSignup               vendorSignUp;
+      #    VendTmpCurrentVendorResult      vendorCurrent;
+      #    VendTmpUnsolicitedVendorResult  vendorUnsolicited;
+      #    VendRequest                     vendRequest;
+      #    VendTable                       vendor;
+      #    QueryBuildRange                 range;
+      #
+      #    super();
+      #
+      #    switch (element.args().dataset())
+      #    {
+      #        case tablenum(VendRequest):
+      #            vendRequest =  element.args().record() as VendRequest;
+      #            vendRequestRecId = vendRequest.RecId;
+      #            vendPartyRecId = vendRequest.VendParty;
+      #            break;
+      #        case tablenum(VendTable):
+      #            vendor = VendTable::findRecId(element.args().record().RecId);
+      #            vendPartyRecId = vendor.Party;
+      #            // The vendor is only used to get the party which will be used to add vendors to other company accounts to
+      #            // so clear the links
+      #            vendRequestAddVendor_DS.query().dataSourceTable(tablenum(VendRequestAddVendor)).clearDynalinks();
+      #
+      #            //recupération du numéro de compte
+      #            vendAccount = vendor.AccountNum;
+      #
+      #            break;
+      #        case tablenum(VendTmpUnsolicitedVendorResult):
+      #            vendorUnsolicited   = element.args().record();
+      #            vendRequestSignup   = vendorUnsolicited.RequestSignUp;
+      #            mainInstruction.text("@SYS71650");
+      #            break;
+      #        case tablenum(VendRequestSignup):
+      #            vendorSignUp        = element.args().record();
+      #            vendRequestSignup   = vendorSignUp.RecId;
+      #            mainInstruction.text("@SYS71650");
+      #            break;
+      #        case tablenum(VendTmpCurrentVendorResult):
+      #            vendorCurrent   = element.args().record();
+      #            vendor = VendTable::findByCompany(vendorCurrent.VendorDataAreaId, vendorCurrent.VendorAccountNum);
+      #            vendPartyRecId = vendor.Party;
+      #            break;
+      #    }
+      #
+      #    if (vendPartyRecId == 0 && vendRequestSignup == 0)
+      #    {
+      #        // Window must be called with parameters
+      #        throw error("@SYS22539");
+      #    }
+      #
+      #    range = vendRequestAddVendor_DS.query().dataSourceTable(tablenum(VendRequestAddVendor)).addRange(fieldnum(VendRequestAddVendor, Party));
+      #    range.value(queryValue(vendPartyRecId));
+      #    range = vendRequestAddVendor_DS.query().dataSourceTable(tablenum(VendRequestAddVendor)).addRange(fieldnum(VendRequestAddVendor, VendAccountNum));
+      #    // Filter out records were a vendor has already been created
+      #    range.value(queryValue(''));
+      #}
+    ENDSOURCE
+  ENDMETHODS
+  OBJECTBANK
+    PROPERTIES
+    ENDPROPERTIES
+    
+    DATASOURCE
+      OBJECTPOOL
+        PROPERTIES
+          Name                #VendRequestAddVendor
+          Table               #VendRequestAddVendor
+        ENDPROPERTIES
+        
+        FIELDLIST
+          DATAFIELD Company
+            PROPERTIES
+            ENDPROPERTIES
+            
+            METHODS
+              SOURCE #lookup
+                #public void lookup(FormControl _formControl, str _filterStr)
+                #{
+                #    SysTableLookup sysTableLookup = SysTableLookup::newParameters(tablenum(DataArea), _formControl);
+                #
+                #    sysTableLookup.addLookupfield(fieldnum(DataArea,Id));
+                #    sysTableLookup.addLookupfield(fieldnum(DataArea,Name));
+                #
+                #    sysTableLookup.parmQuery(VendRequestAddVendorHelper::getAvailableCompanyQuery(vendPartyRecId));
+                #    sysTableLookup.performFormLookup();
+                #}
+              ENDSOURCE
+            ENDMETHODS
+          ENDDATAFIELD
+          
+          DATAFIELD VendGroup
+            PROPERTIES
+            ENDPROPERTIES
+            
+            METHODS
+              SOURCE #lookup
+                #public void lookup(FormControl _formControl, str _filterStr)
+                #{
+                #    SysTableLookup sysTableLookup = SysTableLookup::newParameters(tablenum(VendGroup), _formControl);
+                #    Query query = new Query();
+                #    QueryBuildDataSource queryBuildDataSource = query.addDataSource(tablenum(VendGroup));
+                #
+                #    sysTableLookup.addLookupfield(fieldnum(VendGroup,VendGroup));
+                #    sysTableLookup.addLookupfield(fieldnum(VendGroup,Name));
+                #
+                #    if (vendRequestAddVendor.Company != '')
+                #    {
+                #        changecompany(vendRequestAddVendor.Company)
+                #        {
+                #            sysTableLookup.parmQuery(query);
+                #            sysTableLookup.performFormLookup();
+                #        }
+                #    }
+                #}
+              ENDSOURCE
+            ENDMETHODS
+          ENDDATAFIELD
+          
+        ENDFIELDLIST
+      ENDOBJECTPOOL
+      METHODS
+        SOURCE #validateWrite
+          #public boolean validateWrite()
+          #{
+          #    boolean ret = true;
+          #
+          #    // Validation is done in the ok clicked event.
+          #
+          #    return ret;
+          #}
+        ENDSOURCE
+        SOURCE #write
+          #public void write()
+          #{
+          #    // Write is done in the ok clicked event.
+          #}
+        ENDSOURCE
+        SOURCE #initValue
+          #public void initValue()
+          #{
+          #    super();
+          #
+          #    if (element.args().menuItemName() == menuitemdisplaystr(VendUnsolicitedVendorCopyVendor) ||
+          #        element.args().menuItemName() == menuitemdisplaystr(VendSearchVendorCreateVendor))
+          #    {
+          #        // default company selected to current
+          #        vendRequestAddVendor.Company = curext();
+          #    }
+          #
+          #    vendRequestAddVendor.Party          = vendPartyRecId;
+          #    vendRequestAddVendor.VendRequest    = vendRequestRecId;
+          #    vendRequestAddVendor.VendAccountNum = vendAccount;
+          #}
+        ENDSOURCE
+      ENDMETHODS
+    ENDDATASOURCE
+  ENDOBJECTBANK
+  
+  REFERENCEDATASOURCES
+  ENDREFERENCEDATASOURCES
+  
+  JOINS
+  ENDJOINS
+  
+  PARTREFERENCES
+  ENDPARTREFERENCES
+  
+  DESIGN
+    PROPERTIES
+      Caption             #@SYS301615
+      Frame               #Dialog
+      WindowType          #Popup
+      HideToolbar         #Yes
+      BackgroundColor     #Window background
+      DataSource          #VendRequestAddVendor
+      Columnspace         #2
+      Style               #DropDialog
+    ENDPROPERTIES
+    
+    CONTAINER
+      CONTROL BUTTONGROUP
+        PROPERTIES
+          Name                #DialogCommit
+          ElementPosition     #1521134249
+          Style               #DialogCommitContainer
+          DataSource          #VendRequestAddVendor
+        ENDPROPERTIES
+        
+        METHODS
+        ENDMETHODS
+      ENDCONTROL 
+      
+      CONTROL GROUP
+        PROPERTIES
+          Name                #DialogContent
+          Width               #Column width
+          ElementPosition     #894784852
+          Style               #DialogContent
+        ENDPROPERTIES
+        
+        METHODS
+        ENDMETHODS
+      ENDCONTROL 
+      
+      CONTROL COMBOBOX
+        PROPERTIES
+          Name                #VendRequestAddVendor_Blocked
+          ElementPosition     #1840700268
+          HierarchyParent     #DialogContent
+          DataSource          #VendRequestAddVendor
+          DataField           #Blocked
+        ENDPROPERTIES
+        
+        METHODS
+        ENDMETHODS
+      ENDCONTROL 
+      
+      CONTROL COMMANDBUTTON
+        PROPERTIES
+          Name                #OKButton
+          ElementPosition     #1431655764
+          HierarchyParent     #DialogCommit
+          Command             #263
+        ENDPROPERTIES
+        
+        METHODS
+          SOURCE #clicked
+            #void clicked()
+            #{
+            #    Args        args;
+            #    FormRun     vendorForm;
+            #
+            #    super();
+            #
+            #    ttsBegin;
+            #
+            #    if (vendRequestSignup != 0 && vendPartyRecId == 0)
+            #    {
+            #        element.createVendRequestFromUnsolicitedParty();
+            #    }
+            #
+            #    if (vendRequestAddVendor.validateWrite())
+            #    {
+            #        vendRequestAddVendor.write();
+            #        VendRequestAddVendorHelper::createVendor(vendRequestAddVendor, vendPartyRecId);
+            #        //reattribution du num du compte pour l'ouverture du form
+            #        vendRequestAddVendor.VendAccountNum = vendAccount;
+            #        ttsCommit;
+            #    }
+            #    else
+            #    {
+            #        ttsAbort;
+            #        return;
+            #    }
+            #
+            #    if (vendRequestAddVendor.VendAccountNum)
+            #    {
+            #        // open created vendor record in vendor details
+            #        changecompany(vendRequestAddVendor.Company)
+            #        {
+            #            args = new Args();
+            #            args.name(formstr(VendTable));
+            #            args.caller();
+            #            args.record(VendTable::find(vendRequestAddVendor.VendAccountNum));
+            #
+            #            vendorForm = classfactory.formRunClass(args);
+            #            vendorForm.init();
+            #            vendorForm.run();
+            #        }
+            #    }
+            #}
+          ENDSOURCE
+        ENDMETHODS
+      ENDCONTROL 
+      
+      CONTROL STATICTEXT
+        PROPERTIES
+          Name                #MainInstruction
+          AutoDeclaration     #Yes
+          ElementPosition     #613566756
+          HierarchyParent     #DialogContent
+          Text                #@SYS301615
+          Style               #MainInstruction
+        ENDPROPERTIES
+        
+        METHODS
+        ENDMETHODS
+      ENDCONTROL 
+      
+      CONTROL STRINGEDIT
+        PROPERTIES
+          Name                #VendRequestAddVendor_Company
+          ElementPosition     #920350134
+          HierarchyParent     #DialogContent
+          DataSource          #VendRequestAddVendor
+          DataField           #Company
+        ENDPROPERTIES
+        
+        METHODS
+        ENDMETHODS
+      ENDCONTROL 
+      
+      CONTROL STRINGEDIT
+        PROPERTIES
+          Name                #VendRequestAddVendor_Currency
+          ElementPosition     #1533916890
+          HierarchyParent     #DialogContent
+          DataSource          #VendRequestAddVendor
+          DataField           #Currency
+        ENDPROPERTIES
+        
+        METHODS
+        ENDMETHODS
+      ENDCONTROL 
+      
+      CONTROL STRINGEDIT
+        PROPERTIES
+          Name                #VendRequestAddVendor_VendGroup
+          ElementPosition     #1227133512
+          HierarchyParent     #DialogContent
+          DataSource          #VendRequestAddVendor
+          DataField           #VendGroup
+        ENDPROPERTIES
+        
+        METHODS
+        ENDMETHODS
+      ENDCONTROL 
+      
+    ENDCONTAINER
+    
+  ENDDESIGN
+  
+  PERMISSIONS #Permissions
+    PROPERTIES
+    ENDPROPERTIES
+    
+    PERMISSIONSET #Read
+      PROPERTIES
+      ENDPROPERTIES
+      
+      FORM #Controls
+      ENDFORM
+      
+    TABLES #Tables
+    ENDTABLES
+    
+  SERVERMETHODS #Server Methods
+  ENDSERVERMETHODS
+  
+ASSOCIATEDFORMS #Associated Forms
+  ASSOCIATEDFORM #EcoResCategorySingleLookup
+    PROPERTIES
+      Form                #EcoResCategorySingleLookup
+      AccessLevel         #Read
+      SystemManaged       #No
+      ManagedBy           #Manual
+    ENDPROPERTIES
+    
+  ENDASSOCIATEDFORM
+  
+ENDASSOCIATEDFORMS
+
+ENDPERMISSIONSET
+
+PERMISSIONSET #Update
+  PROPERTIES
+  ENDPROPERTIES
+  
+  FORM #Controls
+  ENDFORM
+  
+TABLES #Tables
+ENDTABLES
+
+SERVERMETHODS #Server Methods
+ENDSERVERMETHODS
+
+ASSOCIATEDFORMS #Associated Forms
+  ASSOCIATEDFORM #EcoResCategorySingleLookup
+    PROPERTIES
+      Form                #EcoResCategorySingleLookup
+      AccessLevel         #Read
+      SystemManaged       #No
+      ManagedBy           #Manual
+    ENDPROPERTIES
+    
+  ENDASSOCIATEDFORM
+  
+ENDASSOCIATEDFORMS
+
+ENDPERMISSIONSET
+
+PERMISSIONSET #Create
+  PROPERTIES
+  ENDPROPERTIES
+  
+  FORM #Controls
+  ENDFORM
+  
+TABLES #Tables
+ENDTABLES
+
+SERVERMETHODS #Server Methods
+ENDSERVERMETHODS
+
+ASSOCIATEDFORMS #Associated Forms
+  ASSOCIATEDFORM #EcoResCategorySingleLookup
+    PROPERTIES
+      Form                #EcoResCategorySingleLookup
+      AccessLevel         #Read
+      SystemManaged       #No
+      ManagedBy           #Manual
+    ENDPROPERTIES
+    
+  ENDASSOCIATEDFORM
+  
+ENDASSOCIATEDFORMS
+
+ENDPERMISSIONSET
+
+PERMISSIONSET #Delete
+  PROPERTIES
+  ENDPROPERTIES
+  
+  FORM #Controls
+  ENDFORM
+  
+TABLES #Tables
+ENDTABLES
+
+SERVERMETHODS #Server Methods
+ENDSERVERMETHODS
+
+ASSOCIATEDFORMS #Associated Forms
+  ASSOCIATEDFORM #EcoResCategorySingleLookup
+    PROPERTIES
+      Form                #EcoResCategorySingleLookup
+      AccessLevel         #Read
+      SystemManaged       #No
+      ManagedBy           #Manual
+    ENDPROPERTIES
+    
+  ENDASSOCIATEDFORM
+  
+ENDASSOCIATEDFORMS
+
+ENDPERMISSIONSET
+
+ENDPERMISSIONS
+
+ENDFORM
+
+
+***Element: PRN
+
+; Microsoft Dynamics AX Project : LancementFournisseurAvecAccountNum unloaded
+; --------------------------------------------------------------------------------
+  PROJECTVERSION 2
+  
+  PROJECT #LancementFournisseurAvecAccountNum
+  PRIVATE
+  PROPERTIES
+    Name                #LancementFournisseurAvecAccountNum
+    Origin              #{960A670D-D738-411C-AA21-C66BB6FDE88E}
+  ENDPROPERTIES
+  
+    PROJECTCLASS ProjectNode
+    BEGINNODE
+      FILETYPE 0
+      UTILTYPE 45
+      UTILOBJECTID 1021564
+      NODETYPE 329
+      NAME #VendRequestAddVendorHelper
+    ENDNODE
+    BEGINNODE
+      FILETYPE 0
+      UTILTYPE 11
+      UTILOBJECTID 0
+      NODETYPE 201
+      NAME #VendRequestAddVendor
+    ENDNODE
+  ENDPROJECT
+  
+
+***Element: END
